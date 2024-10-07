@@ -1,0 +1,1 @@
+When you make modifications to the project using the GUI, always remember to save them by using the “Tools->Write Project Tcl” and “File->Export->Export block design” options.
