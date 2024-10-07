@@ -1,0 +1,13 @@
+golden_model
+setup.sh
+testbench.sv.bak
+testbench.sv
+sram.sv
+input_0
+sram_data
+synthesis
+run
+rtl
+project_report
+464
+564
