@@ -85,7 +85,6 @@ module sram     #(parameter  ADDR_WIDTH      = 32  ,
   void'($fgets(entry, fileDesc)); 
   void'($sscanf(entry, "@%x %h", memory_address, memory_data));
   mem[memory_address] = memory_data ;
-  //$display("INFO::%m::readmem file contents : %s  : Addr:%h, Data:%h, MEM:%h", memFile, memory_address, memory_data,mem[memory_address]);
   end
   $fclose(fileDesc);
   end
