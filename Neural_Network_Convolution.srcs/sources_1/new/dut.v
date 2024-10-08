@@ -1,291 +1,390 @@
 `timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company:        Your Company Name
+// Engineer:       Your Name
+//
+// Create Date:    MM/DD/YYYY
+// Design Name:    MyDesign
+// Module Name:    MyDesign
+// Project Name:   Neural_Network_Convolution
+// Target Devices: Xilinx 7-Series FPGAs (Artix-7, Kintex-7, Virtex-7)
+// Tool Versions:  Vivado 2024.1
+//
+// Description:
+// This module implements a state machine that reads input data and weights
+// from various SRAMs, performs a series of convolutions or multiplications,
+// and writes the computed results back to an output SRAM. The module includes
+// multiple stages for reading data, computing, and writing output, and supports
+// a ReLU activation function.
+//
+// Dependencies:
+// None
+//
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// - Ensure the SRAM interface timing and address space match your specific
+//   hardware configuration.
+// - This module is designed for convolution-like operations with a ReLU activation.
+//
+/////////////////////////////////////////////////////////////////////////////////
 
 module MyDesign (
     //---------------------------------------------------------------------------
-    // Control signals
-    //---------------------------------------------------------------------------
-    input   wire dut_run,            // Signal to start the DUT (Design Under Test)
-    output  reg dut_busy,            // Busy signal, high when DUT is processing
-    input   wire reset_b,            // Active-low reset
-    input   wire clk,                // Clock signal
+    // Control Signals
+    input   wire dut_run                    ,   // Start signal for the DUT (Design Under Test)
+    output  reg  dut_busy                   ,   // Busy flag indicating operation in progress
+    input   wire reset_b                    ,   // Active-low reset signal
+    input   wire clk                        ,   // Clock signal
 
     //---------------------------------------------------------------------------
-    // Input SRAM interface
-    //---------------------------------------------------------------------------
-    output reg        input_sram_write_enable,    // Write enable signal for input SRAM
-    output reg [11:0] input_sram_write_addresss,  // Write address for input SRAM
-    output reg [15:0] input_sram_write_data,      // Write data for input SRAM
-    output reg [11:0] input_sram_read_address,    // Read address for input SRAM
-    input  wire [15:0] input_sram_read_data,      // Data read from input SRAM
+    // Input SRAM Interface
+    output reg        input_sram_write_enable    ,   // Write enable for input SRAM
+    output reg [11:0] input_sram_write_addresss  ,   // Write address for input SRAM
+    output reg [15:0] input_sram_write_data      ,   // Data to write to input SRAM
+    output reg [11:0] input_sram_read_address    ,   // Read address for input SRAM
+    input  wire [15:0] input_sram_read_data      ,   // Data read from input SRAM
 
     //---------------------------------------------------------------------------
-    // Output SRAM interface
-    //---------------------------------------------------------------------------
-    output reg        output_sram_write_enable,    // Write enable signal for output SRAM
-    output reg [11:0] output_sram_write_addresss,  // Write address for output SRAM
-    output reg [15:0] output_sram_write_data,      // Data to be written to output SRAM
-    output reg [11:0] output_sram_read_address,    // Read address for output SRAM
-    input  wire [15:0] output_sram_read_data,      // Data read from output SRAM
+    // Output SRAM Interface
+    output reg        output_sram_write_enable    ,   // Write enable for output SRAM
+    output reg [11:0] output_sram_write_addresss  ,   // Write address for output SRAM
+    output reg [15:0] output_sram_write_data      ,   // Data to write to output SRAM
+    output reg [11:0] output_sram_read_address    ,   // Read address for output SRAM
+    input  wire [15:0] output_sram_read_data      ,   // Data read from output SRAM
 
     //---------------------------------------------------------------------------
-    // Scratchpad SRAM interface
-    //---------------------------------------------------------------------------
-    output reg        scratchpad_sram_write_enable,    // Write enable signal for scratchpad SRAM
-    output reg [11:0] scratchpad_sram_write_addresss,  // Write address for scratchpad SRAM
-    output reg [15:0] scratchpad_sram_write_data,      // Write data for scratchpad SRAM
-    output reg [11:0] scratchpad_sram_read_address,    // Read address for scratchpad SRAM
-    input  wire [15:0] scratchpad_sram_read_data,      // Data read from scratchpad SRAM
+    // Scratchpad SRAM Interface
+    output reg        scratchpad_sram_write_enable    ,   // Write enable for scratchpad SRAM
+    output reg [11:0] scratchpad_sram_write_addresss  ,   // Write address for scratchpad SRAM
+    output reg [15:0] scratchpad_sram_write_data      ,   // Data to write to scratchpad SRAM
+    output reg [11:0] scratchpad_sram_read_address    ,   // Read address for scratchpad SRAM
+    input  wire [15:0] scratchpad_sram_read_data      ,   // Data read from scratchpad SRAM
 
     //---------------------------------------------------------------------------
-    // Weights SRAM interface
-    //---------------------------------------------------------------------------
-    output reg        weights_sram_write_enable,    // Write enable signal for weights SRAM
-    output reg [11:0] weights_sram_write_addresss,  // Write address for weights SRAM
-    output reg [15:0] weights_sram_write_data,      // Write data for weights SRAM
-    output reg [11:0] weights_sram_read_address,    // Read address for weights SRAM
-    input  wire [15:0] weights_sram_read_data       // Data read from weights SRAM
+    // Weights SRAM Interface
+    output reg        weights_sram_write_enable    ,   // Write enable for weights SRAM
+    output reg [11:0] weights_sram_write_addresss  ,   // Write address for weights SRAM
+    output reg [15:0] weights_sram_write_data      ,   // Data to write to weights SRAM
+    output reg [11:0] weights_sram_read_address    ,   // Read address for weights SRAM
+    input  wire [15:0] weights_sram_read_data         // Data read from weights SRAM
+
   );
 
   //---------------------------------------------------------------------------
-  // State machine parameters
-  //---------------------------------------------------------------------------
-  parameter Idle       = 4'b0000;  // Idle state
-  parameter ReadWeight = 4'b0001;  // Reading weights from SRAM
-  parameter SaveWeight = 4'b0010;  // Saving weights for convolution operation
-  parameter ReadInput1 = 5'd3;     // State for reading first input for convolution
-  parameter ReadInput2 = 5'd4;     // State for reading second input
-  parameter ReadInput3 = 5'd5;     // Continue reading inputs for convolution
-  parameter ReadInput4 = 5'd6;
-  parameter ReadInput5 = 5'd7;
-  parameter ReadInput6 = 5'd8;
-  parameter ReadInput7 = 5'd9;
-  parameter ReadInput8 = 5'd10;
-  parameter ReadInput9 = 5'd11;
-  parameter ReadInput10 = 5'd12;
-  parameter ReadInput11 = 5'd13;
+  // State Machine Declarations
+  parameter STATE_IDLE         = 4'b0000;  // Idle state, waiting for 'dut_run' to assert
+  parameter STATE_READ_WEIGHT  = 4'b0001;  // State to read weights from SRAM
+  parameter STATE_SAVE_WEIGHT  = 4'b0010;  // State to store weights in internal buffer
 
-  reg [5:0] current_state = Idle;  // Current state of the state machine
+  parameter STATE_READ_INPUT_1 = 5'd3;     // First input read state
+  parameter STATE_READ_INPUT_2 = 5'd4;     // Second input read state
+  parameter STATE_READ_INPUT_3 = 5'd5;     // Third input read state
+  parameter STATE_READ_INPUT_4 = 5'd6;     // Fourth input read state
+  parameter STATE_READ_INPUT_5 = 5'd7;     // Fifth input read state
+  parameter STATE_READ_INPUT_6 = 5'd8;     // Sixth input read state
+  parameter STATE_READ_INPUT_7 = 5'd9;     // Seventh input read state
+  parameter STATE_READ_INPUT_8 = 5'd10;    // Eighth input read state
+  parameter STATE_READ_INPUT_9 = 5'd11;    // Ninth input read state
+  parameter STATE_COMPUTE_OUTPUT = 5'd12;  // State for computing output
+  parameter STATE_WRITE_OUTPUT  = 5'd13;   // State for writing computed output to SRAM
 
   //---------------------------------------------------------------------------
-  // Registers to store inputs and weights
-  //---------------------------------------------------------------------------
-  reg signed [15:0] inputs [5:0];     // Stores input data for convolution
-  wire signed [7:0] tempinput[17:0];  // Temporary input data for convolution
+  // Internal Registers
+  reg  [5:0] current_state = STATE_IDLE;  // Current state of the state machine
 
-  reg signed [7:0] weights [9:0];     // Stores weight data for convolution
+  reg signed [15:0] input_buffer [5:0];   // Buffer for storing input data
+  wire signed [7:0] processed_input [17:0]; // Processed input after splitting 16-bit into 8-bit
 
-  //---------------------------------------------------------------------------
-  // Registers and wires for the convolution and ReLU operations
-  //---------------------------------------------------------------------------
-  wire signed [15:0] Multiplied [8:0];  // Stores results of input * weight multiplications
-  wire signed [15:0] Multiplied2[8:0];  // Stores results for second output channel
+  reg signed [7:0] weight_buffer [9:0];   // Buffer for storing weights
 
-  wire signed [19:0] outputs;    // Summed convolution output for first channel
-  wire signed [19:0] outputs2;   // Summed convolution output for second channel
+  wire signed [15:0] multiplied_results [8:0];  // Multiplication results for first set of inputs
+  wire signed [15:0] multiplied_results2[8:0];  // Multiplication results for second set of inputs
 
-  reg signed [15:0] convrelu;    // Result after applying the ReLU function
+  wire signed [19:0] final_output;        // Summed output from the first set of multiplications
+  wire signed [19:0] final_output2;       // Summed output from the second set of multiplications
 
-  //---------------------------------------------------------------------------
-  // Addresses and counters
-  //---------------------------------------------------------------------------
-  reg [11:0] inputsaddr, weightsaddr, outputsaddr; // Addresses for SRAM interfaces
-  reg [10:0] nextrowcounter;  // Counter to track the next row for input reading
+  reg signed [15:0] relu_output;          // ReLU applied result for the final output
+
+  // Address and Counter Registers
+  reg [11:0] input_address, weight_address, output_address; // Addresses for SRAM
+  reg [10:0] row_counter;                                   // Row counter for input data
 
   //---------------------------------------------------------------------------
-  // Main state machine
-  //---------------------------------------------------------------------------
+  // State Machine Logic
   always @(posedge clk)
   begin
     if (~reset_b)
-    begin  // System reset, all control signals are cleared
+    begin  // Active-low reset logic
+      // Reset all control signals and addresses
       dut_busy <= 1'b0;
-      weights_sram_write_enable <=1'b0;
-      //weights_sram_write_addresss <=12'b0;
-      //weights_sram_write_data <=16'b0;
-      weights_sram_read_address <=12'b0;
-      input_sram_write_enable <=1'b0;
-      //input_sram_write_addresss <=12'b0;
-      //input_sram_write_data <=16'b0;
-      input_sram_read_address <=12'b0;
-      output_sram_write_enable <=1'b0;
-      output_sram_write_addresss <=12'b0;
-      output_sram_write_data <=16'b0;
-      //output_sram_read_address <=12'b0;
-      inputsaddr <= 12'b0;
-      weightsaddr <= 12'b0;
-      outputsaddr <= 12'b0;
-      nextrowcounter <= 10'd0;
+      weights_sram_write_enable <= 1'b0;
+      weights_sram_read_address <= 12'b0;
+      input_sram_write_enable <= 1'b0;
+      input_sram_read_address <= 12'b0;
+      output_sram_write_enable <= 1'b0;
+      output_sram_write_addresss <= 12'b0;
+      output_sram_write_data <= 16'b0;
+      input_address <= 12'b0;
+      weight_address <= 12'b0;
+      output_address <= 12'b0;
+      row_counter <= 10'd0;
+
     end
     else
     begin
-      case(current_state)
-        Idle:
+      case (current_state)
+        //---------------------------------------------------------------------------
+        // IDLE State
+        STATE_IDLE:
         begin
           if (dut_run)
           begin
-            current_state <= ReadWeight;  // Transition to read weights
-            dut_busy <= 1'b1;  // Indicate DUT is busy
+            // Start operation when 'dut_run' is asserted
+            current_state <= STATE_READ_WEIGHT;
+            weights_sram_write_addresss <= 1'b0;
+            weights_sram_read_address <= 12'b0;
+            input_sram_write_enable <= 1'b0;
+            input_sram_read_address <= 12'b0;
+            output_sram_write_enable <= 1'b0;
+            output_sram_write_addresss <= 12'b0;
+            output_sram_write_data <= 16'b0;
+            input_address <= 12'b0;
+            weight_address <= 12'b0;
+            output_address <= 12'b0;
           end
           else
           begin
-            current_state <= Idle;  // Remain in idle
+            current_state <= STATE_IDLE;  // Stay in IDLE if 'dut_run' is not asserted
             dut_busy <= 1'b0;
           end
         end
 
-        ReadWeight:
+        //---------------------------------------------------------------------------
+        // Read weights from SRAM
+        STATE_READ_WEIGHT:
         begin
-          weights_sram_read_address <= weightsaddr;  // Read weight address
-          weightsaddr <= weightsaddr + 1'b1;  // Increment address
-          current_state <= SaveWeight;
+          dut_busy <= 1'b1;
+          current_state <= STATE_SAVE_WEIGHT;
+          weights_sram_write_enable <= 1'b0;
+          weights_sram_read_address <= weight_address;  // Set address to read weight
+          weight_address <= weight_address + 1'b1;      // Increment weight address
         end
 
-        SaveWeight:
+        //---------------------------------------------------------------------------
+        // Save weights into internal buffer
+        STATE_SAVE_WEIGHT:
         begin
-          // Load weight data into weight registers
-          {weights[(weights_sram_read_address*2)-2], weights[(weights_sram_read_address*2)-1]} <= weights_sram_read_data;
-
-          if (weightsaddr > 5)  // Check if all weights are loaded
-            current_state <= ReadInput1;  // Move to read input stage
-          else
-            current_state <= ReadWeight;
-        end
-
-        ReadInput1:
-        begin
-          input_sram_read_address <= inputsaddr;  // Read first input
-          current_state <= ReadInput2;
-        end
-
-        ReadInput2:
-        begin
-          input_sram_read_address <= inputsaddr + 1'd1;  // Read second input
-          current_state <= ReadInput3;
-        end
-
-        ReadInput3:
-        begin
-          inputs[0] <= input_sram_read_data;  // Store first input data
-          input_sram_read_address <= inputsaddr + 8;  // Prepare to read next input
-          current_state <= ReadInput4;
-        end
-
-        // Continue reading input data
-        ReadInput4:
-        begin
-          inputs[1] <= input_sram_read_data;
-          input_sram_read_address <= inputsaddr + 9;
-          current_state <= ReadInput5;
-        end
-        ReadInput5:
-        begin
-          inputs[2] <= input_sram_read_data;
-          input_sram_read_address <= inputsaddr + 16;
-          current_state <= ReadInput6;
-        end
-        ReadInput6:
-        begin
-          inputs[3] <= input_sram_read_data;
-          input_sram_read_address <= inputsaddr + 17;
-          current_state <= ReadInput7;
-        end
-        ReadInput7:
-        begin
-          inputs[4] <= input_sram_read_data;
-          current_state <= ReadInput8;
-        end
-        ReadInput8:
-        begin
-          inputs[5] <= input_sram_read_data;  // Store final input value
-          if (nextrowcounter > 5)
+          if (weight_address > 0)
           begin
-            inputsaddr <= inputsaddr + 2;  // Move to next row
-            nextrowcounter <= 0;
+            // Store two weights into the weight buffer
+            {weight_buffer[(weights_sram_read_address*2)-2'd2], weight_buffer[(weights_sram_read_address*2)-2'd1]} <= weights_sram_read_data;
+          end
+
+          if (weight_address > 5)
+          begin
+            // If all weights are read, move to input read state
+            current_state <= STATE_READ_INPUT_1;
           end
           else
           begin
-            inputsaddr <= inputsaddr + 1;  // Increment input address
-            nextrowcounter <= nextrowcounter + 1;
+            // Continue reading weights
+            current_state <= STATE_READ_WEIGHT;
           end
-          current_state <= ReadInput9;
         end
 
-        // Apply ReLU after convolution
-        ReadInput9:
+        //---------------------------------------------------------------------------
+        // Reading input data from Input SRAM in stages
+        STATE_READ_INPUT_1:
         begin
-          // Apply ReLU function
-          convrelu[15:8] <= (outputs > 127) ? 8'd127 : (outputs < 0) ? 8'd0 : outputs;
-          convrelu[7:0]  <= (outputs2 > 127) ? 8'd127 : (outputs2 < 0) ? 8'd0 : outputs2;
-          current_state <= ReadInput10;
-        end
-
-        ReadInput10:
-        begin
-          output_sram_write_enable <= 1'b1;  // Write convolved data to output SRAM
-          output_sram_write_addresss <= outputsaddr;
-          output_sram_write_data <= convrelu;
-          outputsaddr <= outputsaddr + 1;
-
-          if (inputsaddr > 110)  // End of convolution
-            current_state <= ReadInput11;
-          else
-            current_state <= ReadInput1;  // Continue with next input
-        end
-
-        ReadInput11:
-        begin
-          dut_busy <= 1'b0;  // Done with processing
-          current_state <= Idle;
+          current_state <= STATE_READ_INPUT_2;
           output_sram_write_enable <= 1'b0;
+          input_sram_write_enable <= 1'b0;
+          input_sram_read_address <= input_address;
+        end
+        STATE_READ_INPUT_2:
+        begin
+          current_state <= STATE_READ_INPUT_3;
+          input_sram_read_address <= input_address + 1'd1;
+        end
+        STATE_READ_INPUT_3:
+        begin
+          current_state <= STATE_READ_INPUT_4;
+          input_sram_read_address <= input_address + 5'd8;
+          input_buffer[0] <= input_sram_read_data;
+        end
+        STATE_READ_INPUT_4:
+        begin
+          current_state <= STATE_READ_INPUT_5;
+          input_sram_read_address <= input_address + 5'd9;
+          input_buffer[1] <= input_sram_read_data;
+        end
+        STATE_READ_INPUT_5:
+        begin
+          current_state <= STATE_READ_INPUT_6;
+          input_sram_read_address <= input_address + 5'd16;
+          input_buffer[2] <= input_sram_read_data;
+        end
+        STATE_READ_INPUT_6:
+        begin
+          current_state <= STATE_READ_INPUT_7;
+          input_sram_read_address <= input_address + 5'd17;
+          input_buffer[3] <= input_sram_read_data;
+        end
+        STATE_READ_INPUT_7:
+        begin
+          current_state <= STATE_READ_INPUT_8;
+          input_buffer[4] <= input_sram_read_data;
+        end
+        STATE_READ_INPUT_8:
+        begin
+          // Last read of input data
+          current_state <= STATE_READ_INPUT_9;
+          input_buffer[5] <= input_sram_read_data;
+
+          // Manage input address increment and row counting
+          if (row_counter > 5)
+          begin
+            input_address <= input_address + 2'd2;
+            row_counter <= 8'd0;
+          end
+          else
+          begin
+            input_address <= input_address + 1'b1;
+            row_counter <= row_counter + 1'b1;
+          end
         end
 
+        //---------------------------------------------------------------------------
+        // Compute output based on inputs and weights
+        STATE_READ_INPUT_9:
+        begin
+          current_state <= STATE_COMPUTE_OUTPUT;
+
+          // Apply ReLU activation to the computed outputs
+          if (final_output > 127)
+          begin
+            relu_output[15:8] <= 8'd127;
+          end
+          else if (final_output < 0)
+          begin
+            relu_output[15:8] <= 8'd0;
+          end
+          else
+          begin
+            relu_output[15:8] <= final_output;
+          end
+
+          if (final_output2 > 127)
+          begin
+            relu_output[7:0] <= 8'd127;
+          end
+          else if (final_output2 < 0)
+          begin
+            relu_output[7:0] <= 8'd0;
+          end
+          else
+          begin
+            relu_output[7:0] <= final_output2;
+          end
+        end
+
+        //---------------------------------------------------------------------------
+        // Write computed output to Output SRAM
+        STATE_COMPUTE_OUTPUT:
+        begin
+          output_sram_write_enable <= 1'b1;
+          output_sram_write_addresss <= output_address;
+          output_sram_write_data <= relu_output;  // Write ReLU output to SRAM
+          output_address <= output_address + 1'b1;
+
+          if (input_address > 110)
+          begin
+            // End of computation, move to writing final output
+            current_state <= STATE_WRITE_OUTPUT;
+          end
+          else
+          begin
+            // Continue reading inputs for further computation
+            current_state <= STATE_READ_INPUT_1;
+          end
+        end
+
+        //---------------------------------------------------------------------------
+        // Final State to Complete Output Writing
+        STATE_WRITE_OUTPUT:
+        begin
+          current_state <= STATE_IDLE;
+          output_sram_write_enable <= 1'b0;
+          dut_busy <= 1'b0;  // Clear busy signal when done
+        end
+
+        //---------------------------------------------------------------------------
+        // Default State: Return to Idle in case of unexpected behavior
         default:
-          current_state <= Idle;
+        begin
+          current_state <= STATE_IDLE;
+        end
       endcase
     end
   end
 
   //---------------------------------------------------------------------------
-  // Convolution operation and ReLU application
+  // Input Processing: Split input_buffer into processed 8-bit values
+  assign processed_input[0] = input_buffer[0][15:8];
+  assign processed_input[1] = input_buffer[0][7:0];
+  assign processed_input[2] = input_buffer[1][15:8];
+
+  assign processed_input[3] = input_buffer[2][15:8];
+  assign processed_input[4] = input_buffer[2][7:0];
+  assign processed_input[5] = input_buffer[3][15:8];
+
+  assign processed_input[6] = input_buffer[4][15:8];
+  assign processed_input[7] = input_buffer[4][7:0];
+  assign processed_input[8] = input_buffer[5][15:8];
+
+  assign processed_input[9] = input_buffer[0][7:0];
+  assign processed_input[10] = input_buffer[1][15:8];
+  assign processed_input[11] = input_buffer[1][7:0];
+
+  assign processed_input[12] = input_buffer[2][7:0];
+  assign processed_input[13] = input_buffer[3][15:8];
+  assign processed_input[14] = input_buffer[3][7:0];
+
+  assign processed_input[15] = input_buffer[4][7:0];
+  assign processed_input[16] = input_buffer[5][15:8];
+  assign processed_input[17] = input_buffer[5][7:0];
+
+
   //---------------------------------------------------------------------------
+  // Weight Multiplication Results for First and Second Sets of Inputs
+  assign multiplied_results[0] = processed_input[0]*weight_buffer[0];
+  assign multiplied_results[1] = processed_input[1]*weight_buffer[1];
+  assign multiplied_results[2] = processed_input[2]*weight_buffer[2];
 
-  // Extract input data for multiplication
-  assign tempinput[0] = inputs[0][15:8];
-  assign tempinput[1] = inputs[0][7:0];
-  assign tempinput[2] = inputs[1][15:8];
-  assign tempinput[3] = inputs[2][15:8];
-  assign tempinput[4] = inputs[2][7:0];
-  assign tempinput[5] = inputs[3][15:8];
-  assign tempinput[6] = inputs[4][15:8];
-  assign tempinput[7] = inputs[4][7:0];
-  assign tempinput[8] = inputs[5][15:8];
+  assign multiplied_results[3] = processed_input[3]*weight_buffer[3];
+  assign multiplied_results[4] = processed_input[4]*weight_buffer[4];
+  assign multiplied_results[5] = processed_input[5]*weight_buffer[5];
 
-  // Perform convolution (input * weight)
-  assign Multiplied[0] = tempinput[0] * weights[0];
-  assign Multiplied[1] = tempinput[1] * weights[1];
-  assign Multiplied[2] = tempinput[2] * weights[2];
-  assign Multiplied[3] = tempinput[3] * weights[3];
-  assign Multiplied[4] = tempinput[4] * weights[4];
-  assign Multiplied[5] = tempinput[5] * weights[5];
-  assign Multiplied[6] = tempinput[6] * weights[6];
-  assign Multiplied[7] = tempinput[7] * weights[7];
-  assign Multiplied[8] = tempinput[8] * weights[8];
+  assign multiplied_results[6] = processed_input[6]*weight_buffer[6];
+  assign multiplied_results[7] = processed_input[7]*weight_buffer[7];
+  assign multiplied_results[8] = processed_input[8]*weight_buffer[8];
+  assign final_output = multiplied_results[0]+multiplied_results[1]+multiplied_results[2]+multiplied_results[3]+multiplied_results[4]+multiplied_results[5]+multiplied_results[6]+multiplied_results[7]+multiplied_results[8];
 
-  // Sum the results to produce final output
-  assign outputs = Multiplied[0] + Multiplied[1] + Multiplied[2] + Multiplied[3] + Multiplied[4] + Multiplied[5] + Multiplied[6] + Multiplied[7] + Multiplied[8];
+  assign multiplied_results2[0] = processed_input[9]*weight_buffer[0];
+  assign multiplied_results2[1] = processed_input[10]*weight_buffer[1];
+  assign multiplied_results2[2] = processed_input[11]*weight_buffer[2];
 
-  // Perform second channel convolution
-  assign Multiplied2[0] = tempinput[9] * weights[0];
-  assign Multiplied2[1] = tempinput[10] * weights[1];
-  assign Multiplied2[2] = tempinput[11] * weights[2];
-  assign Multiplied2[3] = tempinput[12] * weights[3];
-  assign Multiplied2[4] = tempinput[13] * weights[4];
-  assign Multiplied2[5] = tempinput[14] * weights[5];
-  assign Multiplied2[6] = tempinput[15] * weights[6];
-  assign Multiplied2[7] = tempinput[16] * weights[7];
-  assign Multiplied2[8] = tempinput[17] * weights[8];
+  assign multiplied_results2[3] = processed_input[12]*weight_buffer[3];
+  assign multiplied_results2[4] = processed_input[13]*weight_buffer[4];
+  assign multiplied_results2[5] = processed_input[14]*weight_buffer[5];
 
-  // Sum the second channel results
-  assign outputs2 = Multiplied2[0] + Multiplied2[1] + Multiplied2[2] + Multiplied2[3] + Multiplied2[4] + Multiplied2[5] + Multiplied2[6] + Multiplied2[7] + Multiplied2[8];
+  assign multiplied_results2[6] = processed_input[15]*weight_buffer[6];
+  assign multiplied_results2[7] = processed_input[16]*weight_buffer[7];
+  assign multiplied_results2[8] = processed_input[17]*weight_buffer[8];
+  assign final_output2 = multiplied_results2[0]+multiplied_results2[1]+multiplied_results2[2]+multiplied_results2[3]+multiplied_results2[4]+multiplied_results2[5]+multiplied_results2[6]+multiplied_results2[7]+multiplied_results2[8];
+
 
 endmodule
+
+
